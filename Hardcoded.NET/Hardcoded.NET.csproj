@@ -1,19 +1,50 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
+  <PropertyGroup Label="Build">
     <TargetFramework>netstandard2.0</TargetFramework>
-    <IncludeBuildOutput>false</IncludeBuildOutput>
     <Nullable>enable</Nullable>
     <ImplicitUsings>true</ImplicitUsings>
-    <LangVersion>Latest</LangVersion>
+    <LangVersion>default</LangVersion>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- Prevents this source generator's dependencies from being included to the end developer's project -->
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <!-- No dependency is needed at with a source generator -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+  </PropertyGroup>
+
+  <PropertyGroup Label="PackageMetadata">
+    <Title>Hardcoded.NET</Title>
+    <Version>0.1.0</Version>
+    <Authors>Wave</Authors>
+    <Company>Wave</Company>
+    <Copyright>Copyright (c) 2026 Emanuele Onnivello</Copyright>
+    <Description>Turn 'hardcoding' into a performance feature. Ironic, but accurate. It is a source generator that leverages Roslyn to convert resources into mapped constants.</Description>
+    <PackageTags>hardcoded;constants;roslyn;source-generator</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://codeberg.org/wave/Hardcoded.NET</PackageProjectUrl>
+    <RepositoryUrl>https://codeberg.org/wave/Hardcoded.NET</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+  
+  <!-- Passes the source code and debug capabilities to the end developer. Less useful in a source generator library, but still nice to have. -->
+  <PropertyGroup Label="Debugging">
+    <DebugType>embedded</DebugType>
+    <!-- Compresses the source files and stores them inside the binary metadata of the DLL itself. No separate symbol package (.snupkg) needed. -->
+    <EmbedAllSources>true</EmbedAllSources>
   </PropertyGroup>
   
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all" />
+    <!-- v4.8.0 is compatible with VS 17.8+ (Nov 2023) and .NET 8 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
   </ItemGroup>
   
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>
