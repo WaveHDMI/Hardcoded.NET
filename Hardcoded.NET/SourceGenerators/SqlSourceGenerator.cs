@@ -96,10 +96,10 @@ public static class SqlSourceGenerator
 		);
 	}
 
-	private static Dictionary<string, Dictionary<string, Dictionary<string, string>>> ParseNamespaces(string content)
+	private static Dictionary<string, Dictionary<string, Dictionary<string, SqlQueryMetadata>>> ParseNamespaces(string content)
 	{
 		// Namespace -> Class -> Constant/Field name -> Query string
-		var queries = new Dictionary<string, Dictionary<string, Dictionary<string, string>>>(StringComparer.OrdinalIgnoreCase);
+		var queries = new Dictionary<string, Dictionary<string, Dictionary<string, SqlQueryMetadata>>>(StringComparer.OrdinalIgnoreCase);
 
 		// Find all namespace matches
 		// We will split each namespace block and parse the classes within
@@ -119,7 +119,7 @@ public static class SqlSourceGenerator
 			// Get or create the namespace dictionary
 			if (!queries.TryGetValue(namespaceName, out var classes))
 			{
-				classes = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+				classes = new Dictionary<string, Dictionary<string, SqlQueryMetadata>>(StringComparer.OrdinalIgnoreCase);
 				queries[namespaceName] = classes;
 			}
 
@@ -130,7 +130,7 @@ public static class SqlSourceGenerator
 		return queries;
 	}
 
-	private static void ParseClasses(string namespaceContent, Dictionary<string, Dictionary<string, string>> classes)
+	private static void ParseClasses(string namespaceContent, Dictionary<string, Dictionary<string, SqlQueryMetadata>> classes)
 	{
 		// Find all class matches within the namespace content
 		var classMatches = ClassRegex.Matches(namespaceContent);
@@ -149,7 +149,7 @@ public static class SqlSourceGenerator
 			// Get or create the class dictionary
 			if (!classes.TryGetValue(className, out var queries))
 			{
-				queries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+				queries = new Dictionary<string, SqlQueryMetadata>(StringComparer.OrdinalIgnoreCase);
 				classes[className] = queries;
 			}
 
@@ -158,7 +158,7 @@ public static class SqlSourceGenerator
 		}
 	}
 
-	private static void ParseQueries(string classContent, Dictionary<string, string> queries)
+	private static void ParseQueries(string classContent, Dictionary<string, SqlQueryMetadata> queries)
 	{
 		// Find all @name matches within the class content
 		var nameMatches = NameRegex.Matches(classContent);
@@ -172,10 +172,40 @@ public static class SqlSourceGenerator
 			var queryStartIndex = nameMatch.Index + nameMatch.Length;
 			var queryEndIndex = (i < nameMatches.Count - 1) ? nameMatches[i + 1].Index : classContent.Length;
 
-			var queryContent = classContent.Substring(queryStartIndex, queryEndIndex - queryStartIndex).Trim();
+			var rawQueryBlock = classContent.Substring(queryStartIndex, queryEndIndex - queryStartIndex);
+			
+			// Separate the summary (comments) from the query content
+			// We assume the summary is everything before the first non-comment line or the actual query
+			// Simplified: The format is -- comments \n query
+			
+			var lines = rawQueryBlock.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+			var summaryBuilder = new StringBuilder();
+			var queryBuilder = new StringBuilder();
+			
+			foreach (var line in lines)
+			{
+				var trimmedLine = line.Trim();
+				if (trimmedLine.StartsWith("--"))
+				{
+					if (queryBuilder.Length == 0)
+					{
+						// It is part of the summary
+						summaryBuilder.AppendLine(trimmedLine.Substring(2).Trim());
+					}
+					else
+					{
+						// It is a comment inside the query
+						queryBuilder.AppendLine(line);
+					}
+				}
+				else
+				{
+					queryBuilder.AppendLine(line);
+				}
+			}
 
 			// Store the query
-			queries[queryName] = queryContent;
+			queries[queryName] = new SqlQueryMetadata(queryBuilder.ToString().Trim(), summaryBuilder.ToString().Trim());
 		}
 	}
 
@@ -190,14 +220,18 @@ public static class SqlSourceGenerator
 			// Validate namespace to prevent code injection
 			if (NameValidator.IsInvalidNamespace(namespaceName))
 			{
-				sourceProductionContext.ReportProblem(DiagnosticDescriptors.InvalidNamespace, namespaceName, Path.GetFileName(metadata.OriginalFilePath));
+				sourceProductionContext.ReportProblem(
+					DiagnosticDescriptors.InvalidNamespace,
+					new object?[] { namespaceName, Path.GetFileName(metadata.OriginalFilePath) });
 				continue;
 			}
 
 			// Validate identifiers to prevent code injection
 			if (NameValidator.IsInvalidCSharpName(className))
 			{
-				sourceProductionContext.ReportProblem(DiagnosticDescriptors.InvalidClassName, className, Path.GetFileName(metadata.OriginalFilePath));
+				sourceProductionContext.ReportProblem(
+					DiagnosticDescriptors.InvalidClassName,
+					new object?[] { className, Path.GetFileName(metadata.OriginalFilePath) });
 				continue;
 			}
 
@@ -205,27 +239,40 @@ public static class SqlSourceGenerator
 			var codeBuilder = new StringBuilder();
 			codeBuilder.AppendLine($"namespace {namespaceName};");
 			codeBuilder.AppendLine();
-			codeBuilder.AppendLine($"public static partial class {className}");
+			codeBuilder.AppendLine($"internal static partial class {className}");
 			codeBuilder.AppendLine("{");
 
 			foreach (var query in dictionary)
 			{
 				var queryName = query.Key;
+				var queryMeta = query.Value;
 
 				// Validate query name identifier
 				if (NameValidator.IsInvalidCSharpName(queryName))
 				{
-					sourceProductionContext.ReportProblem(DiagnosticDescriptors.InvalidQueryName, className, Path.GetFileName(metadata.OriginalFilePath));
+					sourceProductionContext.ReportProblem(
+						DiagnosticDescriptors.InvalidQueryName,
+						new object?[] { className, Path.GetFileName(metadata.OriginalFilePath) });
 					continue; // Skip this query
 				}
 
 				// Escape quotes for C# verbatim strings
-				var safeSql = query.Value.Replace("\"", "\"\"");
+				var safeSql = queryMeta.Content.Replace("\"", "\"\"");
 
 				codeBuilder.AppendLine($"    /// <summary>");
-				codeBuilder.AppendLine($"    /// Query from {Path.GetFileNameWithoutExtension(metadata.OriginalFilePath)}.sql");
-				codeBuilder.AppendLine($"    /// </summary>");
-				codeBuilder.AppendLine($"    public const string {queryName} = @\"{safeSql}\";");
+				if (!string.IsNullOrWhiteSpace(queryMeta.Summary))
+				{
+					foreach (var line in queryMeta.Summary.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+					{
+						codeBuilder.AppendLine($"    /// {line}");
+					}
+				}
+				else
+				{
+					codeBuilder.AppendLine($"    /// Query from {Path.GetFileNameWithoutExtension(metadata.OriginalFilePath)}.sql");
+				}
+				codeBuilder.AppendLine("    /// </summary>");
+				codeBuilder.AppendLine($"    internal const string {queryName} = @\"{safeSql}\";");
 				codeBuilder.AppendLine();
 			}
 

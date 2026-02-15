@@ -23,11 +23,13 @@
     <Company>Wave</Company>
     <Copyright>Copyright (c) 2026 Emanuele Onnivello</Copyright>
     <Description>Turn 'hardcoding' into a performance feature. Ironic, but accurate. It is a source generator that leverages Roslyn to convert resources into mapped constants.</Description>
-    <PackageTags>hardcoded;constants;roslyn;source-generator</PackageTags>
+    <PackageTags>hardcoded;constants;roslyn;source-generator;sql;query</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://codeberg.org/wave/Hardcoded.NET</PackageProjectUrl>
     <RepositoryUrl>https://codeberg.org/wave/Hardcoded.NET</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- <PackageIcon>icon.png</PackageIcon> -->
   </PropertyGroup>
   
   <!-- Passes the source code and debug capabilities to the end developer. Less useful in a source generator library, but still nice to have. -->
@@ -45,6 +47,8 @@
   
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include=".\Hardcoded.NET.targets" Pack="true" PackagePath="build" />
     <None Include="..\LICENSE" Pack="true" PackagePath="" />
+    <None Include="..\README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>

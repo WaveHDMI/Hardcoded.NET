@@ -1,5 +1,4 @@
-﻿using Hardcoded.NET.Model;
-using Hardcoded.NET.Model.Reporting;
+﻿using Hardcoded.NET.Model.Reporting;
 using Microsoft.CodeAnalysis;
 
 namespace Hardcoded.NET.Common.Reporting;
@@ -66,8 +65,7 @@ internal static class DiagnosticDescriptors
 			// Report it to the compiler
 			sourceProductionContext.ReportProblem(
 				ex is SourceParseException ? ParseError : UnhandledError,
-				Path.GetFileName(fileName),
-				ex.Message);
+				new object?[] { Path.GetFileName(fileName), ex.Message });
 		}
 	}
 }
