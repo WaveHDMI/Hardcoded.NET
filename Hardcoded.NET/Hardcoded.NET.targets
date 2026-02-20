@@ -1,6 +1,8 @@
 <Project>
-    <!-- Automatically include all .sql files as AdditionalFiles for the source generator -->
-    <ItemGroup>
-        <AdditionalFiles Include="**/*.sql" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);$(BaseIntermediateOutputPath)**;$(BaseOutputPath)**;@(AdditionalFiles)" />
-    </ItemGroup>
+	<Target Name="IncludeSqlFiles" BeforeTargets="Compile">
+		<!-- Automatically include all .sql files as AdditionalFiles for the source generator -->
+		<ItemGroup>
+			<AdditionalFiles Include="**/*.sql" Exclude="$(DefaultItemExcludes);$(DefaultItemExcludesInProjectFolder);$(BaseIntermediateOutputPath);$(BaseOutputPath);@(AdditionalFiles)" />
+		</ItemGroup>
+	</Target>
 </Project>

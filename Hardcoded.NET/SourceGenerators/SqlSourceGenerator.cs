@@ -10,12 +10,11 @@ namespace Hardcoded.NET.SourceGenerators;
 
 public static class SqlSourceGenerator
 {
-	private const string HardcodedTag = "-- @hardcoded ";
-
 	// Regex patterns for parsing tags
-	private static readonly Regex NamespaceRegex = new(@"--[ \t]*@namespace[ \t]+(\S+)\s", RegexOptions.Compiled);
-	private static readonly Regex ClassRegex = new(@"--[ \t]*@class[ \t]+(\S+)\s", RegexOptions.Compiled);
-	private static readonly Regex NameRegex = new(@"--[ \t]*@name[ \t]+(\S+)\s", RegexOptions.Compiled);
+	private static readonly Regex HardcodedRegex = new(@"--[ \t]*@hardcoded\s*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+	private static readonly Regex NamespaceRegex = new(@"--[ \t]*@namespace[ \t]+(\S+)\s", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+	private static readonly Regex ClassRegex = new(@"--[ \t]*@class[ \t]+(\S+)\s", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+	private static readonly Regex NameRegex = new(@"--[ \t]*@name[ \t]+(\S+)\s", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
 	public static void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -79,12 +78,14 @@ public static class SqlSourceGenerator
 			return null;
 		}
 
-		var contentStartIndex = rawContent.IndexOf(HardcodedTag, StringComparison.Ordinal);
-		var nextIndex = contentStartIndex + HardcodedTag.Length;
-		if (contentStartIndex == -1 || nextIndex >= rawContent.Length)
+		var hardcodedMatches = HardcodedRegex.Matches(rawContent);
+		if (hardcodedMatches.Count == 0)
 		{
 			return null;
 		}
+
+		var hardcodedMatch = hardcodedMatches[0];
+		var nextIndex = hardcodedMatch.Index + hardcodedMatch.Length;
 
 		var content = rawContent.Substring(nextIndex);
 		var queries = ParseNamespaces(content);
@@ -178,7 +179,7 @@ public static class SqlSourceGenerator
 			// We assume the summary is everything before the first non-comment line or the actual query
 			// Simplified: The format is -- comments \n query
 			
-			var lines = rawQueryBlock.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+			var lines = rawQueryBlock.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
 			var summaryBuilder = new StringBuilder();
 			var queryBuilder = new StringBuilder();
 			
