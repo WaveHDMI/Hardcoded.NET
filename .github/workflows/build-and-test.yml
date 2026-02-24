@@ -1,4 +1,4 @@
-name: Build and test solution
+name: Build and test
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 jobs:
   build-and-test:
 
-    name: build-and-test-${{matrix.os}}
+    name: ci-${{ matrix.os }}-${{ matrix.dotnet }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
