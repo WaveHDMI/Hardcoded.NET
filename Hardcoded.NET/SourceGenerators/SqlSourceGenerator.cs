@@ -3,6 +3,7 @@ using Hardcoded.NET.Common.Reporting;
 using Hardcoded.NET.Model;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -18,6 +19,7 @@ public static class SqlSourceGenerator
 	private static readonly Regex QueryStartRegex = new(@"--[ \t]*@start\s*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
 	private static readonly Regex WindowsNewLineRegex = new(@"\r\n|\r", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+	private static readonly Regex StringFormatRegex = new(@"@(\d+)(?!\w)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
 	public static void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -226,13 +228,17 @@ public static class SqlSourceGenerator
 					else
 					{
 						isQueryStarted = true;
-						queryBuilder.AppendLine(line);
 					}
 				}
 			}
-			else
+
+			if (isQueryStarted)
 			{
-				queryBuilder.AppendLine(line);
+				// Replace string format placeholders like @0, @1, etc. with {0}, {1} for C# string formatting
+				// This covers the case where part of a query have to be replaced at runtime due to internal logic limitations
+				// (normally a SQL variable shouldn't use a numeric-only name, non-numeric variable names are ignored by this replacement)
+				var queryLine = StringFormatRegex.Replace(line, match => "{" + match.Groups[1].Value + "}");
+				queryBuilder.AppendLine(queryLine);
 			}
 		}
 

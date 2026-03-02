@@ -112,9 +112,53 @@ WHERE [Id] = @Id AND [CodeInt] = @ParamVar";
 """, Encoding.UTF8)));
 
         await context.RunAsync(TestContext.Current.CancellationToken);
-    }
+	}
+	[Fact]
+	public async Task TestStringFormat()
+	{
+		var context = new CSharpSourceGeneratorTest<Hardcoded, DefaultVerifier>
+		{
+			ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+			TestCode = "" // No C# code needed
+		};
 
-    [Fact]
+		// Add SQL file as an additional file (this is what the source generator processes)
+		context.TestState.AdditionalFiles.Add(("TestQueries.sql", """
+-- @hardcoded
+-- @namespace Hardcoded.NET.Test
+    
+-- @class TestQueries
+-- @query TestQuery1
+SELECT *
+FROM [dbo].[Test]
+WHERE @22=2 AND@2d=1
+"""
+			));
+
+		// Expected generated source
+		context.TestState.GeneratedSources.Add((
+			typeof(Hardcoded),
+			"Hardcoded.NET.Test.TestQueries.g.cs",
+			SourceText.From("""
+namespace Hardcoded.NET.Test;
+
+internal static partial class TestQueries
+{
+    /// <summary>
+    /// Query from TestQueries.sql
+    /// </summary>
+    internal const string TestQuery1 = @"SELECT *
+FROM [dbo].[Test]
+WHERE {22}=2 AND@2d=1";
+
+}
+
+""", Encoding.UTF8)));
+
+		await context.RunAsync(TestContext.Current.CancellationToken);
+	}
+
+	[Fact]
     public async Task TestInvalidIdentifier()
     {
         var context = new CSharpSourceGeneratorTest<Hardcoded, DefaultVerifier>
