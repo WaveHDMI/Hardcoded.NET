@@ -14,8 +14,8 @@ public sealed record SqlClassMetadata(string TargetNamespace, string TargetClass
 	public Dictionary<string, SqlQueryMetadata> Queries { get; } = Queries;
 }
 
-public sealed record SqlQueryMetadata(string Content, string Summary)
+public sealed record SqlQueryMetadata(string Content, IList<string> Summary)
 {
 	public string Content { get; } = Content;
-	public string Summary { get; } = Summary;
+	public IList<string> Summary { get; } = Summary;
 }

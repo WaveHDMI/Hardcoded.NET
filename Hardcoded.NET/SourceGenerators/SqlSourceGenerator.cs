@@ -14,7 +14,10 @@ public static class SqlSourceGenerator
 	private static readonly Regex HardcodedRegex = new(@"--[ \t]*@hardcoded\s*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 	private static readonly Regex NamespaceRegex = new(@"--[ \t]*@namespace[ \t]+(\S+)\s", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 	private static readonly Regex ClassRegex = new(@"--[ \t]*@class[ \t]+(\S+)\s", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-	private static readonly Regex NameRegex = new(@"--[ \t]*@name[ \t]+(\S+)\s", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+	private static readonly Regex QueryRegex = new(@"--[ \t]*@query[ \t]+(\S+)\s", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+	private static readonly Regex QueryStartRegex = new(@"--[ \t]*@start\s*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+	private static readonly Regex WindowsNewLineRegex = new(@"\r\n|\r", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
 	public static void Initialize(IncrementalGeneratorInitializationContext context)
 	{
@@ -161,53 +164,98 @@ public static class SqlSourceGenerator
 
 	private static void ParseQueries(string classContent, Dictionary<string, SqlQueryMetadata> queries)
 	{
-		// Find all @name matches within the class content
-		var nameMatches = NameRegex.Matches(classContent);
+		// Find all @query matches within the class content
+		var queryMatches = QueryRegex.Matches(classContent);
 
-		for (var i = 0; i < nameMatches.Count; i++)
+		for (var i = 0; i < queryMatches.Count; i++)
 		{
-			var nameMatch = nameMatches[i];
-			var queryName = nameMatch.Groups[1].Value;
+			var queryMatch = queryMatches[i];
+			var queryName = queryMatch.Groups[1].Value;
 
 			// Determine the content range for this query
-			var queryStartIndex = nameMatch.Index + nameMatch.Length;
-			var queryEndIndex = (i < nameMatches.Count - 1) ? nameMatches[i + 1].Index : classContent.Length;
+			var queryStartIndex = queryMatch.Index + queryMatch.Length;
+			var queryEndIndex = (i < queryMatches.Count - 1) ? queryMatches[i + 1].Index : classContent.Length;
 
 			var rawQueryBlock = classContent.Substring(queryStartIndex, queryEndIndex - queryStartIndex);
-			
-			// Separate the summary (comments) from the query content
-			// We assume the summary is everything before the first non-comment line or the actual query
-			// Simplified: The format is -- comments \n query
-			
-			var lines = rawQueryBlock.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-			var summaryBuilder = new StringBuilder();
-			var queryBuilder = new StringBuilder();
-			
-			foreach (var line in lines)
+
+			// Extract and store the query
+			queries[queryName] = ExtractQuery(rawQueryBlock);
+		}
+	}
+
+	private static SqlQueryMetadata ExtractQuery(string content)
+	{
+		// Separate the summary (comments) from the query content
+		// We assume the summary is every SQL comment before the first non-comment line or before the "-- @start" tag if it exists
+		// Simplified: The format is "-- comments \n query"
+
+		List<string> summary;
+		var isQueryStarted = false;
+
+		// Only the first "-- @start" tag is considered as the query start
+		var startMatch = QueryStartRegex.Match(content);
+		if (startMatch.Success)
+		{
+			// Let's read the comments before the @start tag as summary
+			summary = ExtractSummaryLines(content, startMatch.Index);
+			// Forse the query to start after the @start tag
+			content = content.Substring(startMatch.Index + startMatch.Length);
+			isQueryStarted = true;
+		}
+		else
+		{
+			summary = [];
+		}
+
+		var lines = WindowsNewLineRegex.Replace(content, "\n").Split('\n');
+		var queryBuilder = new StringBuilder();
+
+		foreach (var line in lines)
+		{
+			if (!isQueryStarted)
 			{
 				var trimmedLine = line.Trim();
-				if (trimmedLine.StartsWith("--"))
+				if (!string.IsNullOrEmpty(trimmedLine))
 				{
-					if (queryBuilder.Length == 0)
+					// Expect summary lines if there is no @start tag
+					if (!isQueryStarted && trimmedLine.StartsWith("--"))
 					{
-						// It is part of the summary
-						summaryBuilder.AppendLine(trimmedLine.Substring(2).Trim());
+						// Every SQL comment before the query it's part of the summary
+						summary.Add(trimmedLine.Substring(2).Trim());
 					}
 					else
 					{
-						// It is a comment inside the query
+						isQueryStarted = true;
 						queryBuilder.AppendLine(line);
 					}
 				}
-				else
-				{
-					queryBuilder.AppendLine(line);
-				}
 			}
-
-			// Store the query
-			queries[queryName] = new SqlQueryMetadata(queryBuilder.ToString().Trim(), summaryBuilder.ToString().Trim());
+			else
+			{
+				queryBuilder.AppendLine(line);
+			}
 		}
+
+		return new SqlQueryMetadata(queryBuilder.ToString().Trim(), summary);
+	}
+
+	private static List<string> ExtractSummaryLines(string content, int summaryLength)
+	{
+		var summary = new List<string>();
+		var summaryLines = content
+					.Substring(0, summaryLength)
+					.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+		foreach (var line in summaryLines)
+		{
+			var trimmedLine = line.Trim();
+			if (trimmedLine.StartsWith("--"))
+			{
+				summary.Add(trimmedLine.Substring(2).Trim());
+			}
+		}
+
+		return summary;
 	}
 
 	#endregion
@@ -223,7 +271,7 @@ public static class SqlSourceGenerator
 			{
 				sourceProductionContext.ReportProblem(
 					DiagnosticDescriptors.InvalidNamespace,
-					new object?[] { namespaceName, Path.GetFileName(metadata.OriginalFilePath) });
+					[namespaceName, Path.GetFileName(metadata.OriginalFilePath)]);
 				continue;
 			}
 
@@ -232,7 +280,7 @@ public static class SqlSourceGenerator
 			{
 				sourceProductionContext.ReportProblem(
 					DiagnosticDescriptors.InvalidClassName,
-					new object?[] { className, Path.GetFileName(metadata.OriginalFilePath) });
+					[className, Path.GetFileName(metadata.OriginalFilePath)]);
 				continue;
 			}
 
@@ -253,7 +301,7 @@ public static class SqlSourceGenerator
 				{
 					sourceProductionContext.ReportProblem(
 						DiagnosticDescriptors.InvalidQueryName,
-						new object?[] { className, Path.GetFileName(metadata.OriginalFilePath) });
+						[className, Path.GetFileName(metadata.OriginalFilePath)]);
 					continue; // Skip this query
 				}
 
@@ -261,9 +309,9 @@ public static class SqlSourceGenerator
 				var safeSql = queryMeta.Content.Replace("\"", "\"\"");
 
 				codeBuilder.AppendLine($"    /// <summary>");
-				if (!string.IsNullOrWhiteSpace(queryMeta.Summary))
+				if (queryMeta.Summary.Count != 0)
 				{
-					foreach (var line in queryMeta.Summary.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+					foreach (var line in queryMeta.Summary)
 					{
 						codeBuilder.AppendLine($"    /// {line}");
 					}

@@ -9,34 +9,35 @@ namespace Hardcoded.NET.Test;
 
 public sealed class SqlSourceGeneratorTest
 {
-    [Fact]
-    public async Task Test()
-    {
-        var context = new CSharpSourceGeneratorTest<Hardcoded, DefaultVerifier>
-        {
-            ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
-            TestCode = "" // No C# code needed
-        };
+	[Fact]
+	public async Task Test()
+	{
+		var context = new CSharpSourceGeneratorTest<Hardcoded, DefaultVerifier>
+		{
+			ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+			TestCode = "" // No C# code needed
+		};
 
-        // Add SQL file as an additional file (this is what the source generator processes)
-        context.TestState.AdditionalFiles.Add(("TestQueries.sql", """
--- @hardcoded 
+		// Add SQL file as an additional file (this is what the source generator processes)
+		context.TestState.AdditionalFiles.Add(("TestQueries.sql", """
+-- @hardcoded
 -- @namespace Hardcoded.NET.Test
     
 -- @class TestQueries
--- @name TestQuery1
+-- @query TestQuery1
 -- Test comment
+
 SELECT *
 FROM [dbo].[Test]
-WHERE [Id] = 1
+WHERE [Id] = @Id
 """
-            ));
+			));
 
-        // Expected generated source
-        context.TestState.GeneratedSources.Add((
-            typeof(Hardcoded),
-            "Hardcoded.NET.Test.TestQueries.g.cs",
-            SourceText.From("""
+		// Expected generated source
+		context.TestState.GeneratedSources.Add((
+			typeof(Hardcoded),
+			"Hardcoded.NET.Test.TestQueries.g.cs",
+			SourceText.From("""
 namespace Hardcoded.NET.Test;
 
 internal static partial class TestQueries
@@ -46,7 +47,65 @@ internal static partial class TestQueries
     /// </summary>
     internal const string TestQuery1 = @"SELECT *
 FROM [dbo].[Test]
-WHERE [Id] = 1";
+WHERE [Id] = @Id";
+
+}
+
+""", Encoding.UTF8)));
+
+		await context.RunAsync(TestContext.Current.CancellationToken);
+	}
+
+	[Fact]
+    public async Task TestWithStart()
+    {
+        var context = new CSharpSourceGeneratorTest<Hardcoded, DefaultVerifier>
+        {
+            ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+            TestCode = "" // No C# code needed
+        };
+
+        // Add SQL file as an additional file (this is what the source generator processes)
+        context.TestState.AdditionalFiles.Add(("TestQueries.sql", """
+-- @hardcoded
+-- @namespace Hardcoded.NET.Test
+    
+-- @class TestQueries
+-- @query TestQuery1
+-- Test comment
+--
+DECLARE @ParamVar INT = 0
+-- New line
+
+-- @start
+
+DECLARE @Id INT = 1
+
+SELECT *
+FROM [dbo].[Test]
+WHERE [Id] = @Id AND [CodeInt] = @ParamVar
+"""
+            ));
+
+		// Expected generated source
+		context.TestState.GeneratedSources.Add((
+            typeof(Hardcoded),
+            "Hardcoded.NET.Test.TestQueries.g.cs",
+            SourceText.From("""
+namespace Hardcoded.NET.Test;
+
+internal static partial class TestQueries
+{
+    /// <summary>
+    /// Test comment
+    /// 
+    /// New line
+    /// </summary>
+    internal const string TestQuery1 = @"DECLARE @Id INT = 1
+
+SELECT *
+FROM [dbo].[Test]
+WHERE [Id] = @Id AND [CodeInt] = @ParamVar";
 
 }
 
@@ -66,11 +125,11 @@ WHERE [Id] = 1";
 
         // Add SQL file as an additional file
         context.TestState.AdditionalFiles.Add(("InvalidQueries.sql", """
--- @hardcoded 
+-- @hardcoded
 -- @namespace Hardcoded.NET.Test
     
 -- @class class
--- @name int
+-- @query int
 SELECT 1
 """
             ));
