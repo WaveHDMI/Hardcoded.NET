@@ -4,6 +4,8 @@
 
 [![Build and test](https://github.com/WaveHDMI/Hardcoded.NET/actions/workflows/build-and-test.yml/badge.svg?branch=main)](https://github.com/WaveHDMI/Hardcoded.NET/actions/workflows/build-and-test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![NuGet_Release](https://img.shields.io/nuget/v/Hardcoded.NET)](https://www.nuget.org/packages/Hardcoded.NET)
+[![NuGet_Downloads](https://img.shields.io/nuget/dt/Hardcoded.NET)](https://www.nuget.org/packages/Hardcoded.NET)
 
 Turn "hardcoding" into a performance feature.
 
